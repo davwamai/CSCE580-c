@@ -78,6 +78,8 @@ def main():
 
                             print("Player_First: %s, "
                                   "Winner: %s" % (player_order_names[player_order[0]], winner_names[winner]))
+                            print("Final Position: ")
+                            print(state.grid.T)
 
                             num_games += 1
                             break
