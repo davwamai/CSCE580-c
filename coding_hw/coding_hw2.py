@@ -122,12 +122,11 @@ def heuristic(state, env):
     move_count = m_count(state)
     grid = state.grid 
 
+    bot_first = move_count % 2 == 0
+
     # Evaluate lines
     for line in state.get_lines():
-        score += evaluate_line(line)
-
-    # Determine if bot is first or second player based on move count
-    bot_first = move_count % 2 == 0
+        score += evaluate_line(line, bot_first)
 
     # Apply claim_even or claim_odd logic based on who went first
     if bot_first:
@@ -145,26 +144,33 @@ def claim(state, is_bot_first, grid):
         for col_idx in range(grid.shape[1]):
             piece = grid[row_idx][col_idx]
             # Score bonus for controlling strategic rows based on who went first
-            if is_bot_first and row_idx % 2 != 0:  # Bot goes first, favor even rows
+            if is_bot_first and row_idx % 2 != 0:  # Bot goes first, favor odd rows
                 score += (10 if piece == 1 else -5)  # Favor bot pieces, penalize opponent pieces in these rows
-            elif not is_bot_first and row_idx % 2 == 0:  # Bot goes second, favor odd rows
-                score += (10 if piece == 1 else -5)
+            elif not is_bot_first and row_idx % 2 == 0:  # Bot goes second, favor even rows
+                score += (10 if piece == -1 else -5)
 
     return score
 
-def evaluate_line(line):
+def evaluate_line(line, first):
     score = 0
     continuous_length = 1
 
     for i in range(1, len(line)):
-        if line[i] == line[i - 1] and line[i] != 0:
-            continuous_length += 1
+        if first: 
+            if (line[i] and line[i - 1]) == 1 and line[i] != 0:
+                continuous_length += 1
+            else:
+                if continuous_length > 1:  # score iff there are 2 or more continuous chips
+                    score += continuous_length**2 * line[i - 1]  # power of number of continuous chips
+                continuous_length = 1
         else:
-            if continuous_length > 1:  # Only score if there are 2 or more continuous chips
-                score += continuous_length**2 * line[i - 1]  # Power of number of continuous chips
-            continuous_length = 1
+            if (line[i] and line[i - 1]) == -1 and line[i] != 0:
+                continuous_length += 1
+            else:
+                if continuous_length > 1:  # score iff there are 2 or more continuous chips
+                    score += continuous_length**2 * line[i - 1]  # power of number of continuous chips
+                continuous_length = 1
 
-    # Check at the end of the line
     if continuous_length > 1:
         score += continuous_length**2 * line[-1]
 
