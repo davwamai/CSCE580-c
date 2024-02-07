@@ -2,7 +2,12 @@ from environments.connect_four import ConnectFourState, ConnectFour
 import numpy as np
 import time
 
-global move_count
+check_flag = False
+p1 = None
+
+def is_first(state) -> bool:
+    return np.all(state.grid == 0)
+
 def make_move(state: ConnectFourState, env: ConnectFour) -> int:
     """
 
@@ -10,171 +15,132 @@ def make_move(state: ConnectFourState, env: ConnectFour) -> int:
     :param env: the environment
     :return: the action to take
     """
-    return iterative_deepening(state, env)
+    global check_flag
+    global p1
 
+    if not check_flag:
+        p1 = is_first(state)
+        check_flag = True
 
-# def negamax(state, depth, alpha, beta, color, env):
-#     if env.is_terminal(state):
-#         return env.utility(state)
-#     elif depth == 0:
-#         return color * heuristic(state, env)
-    
-#     max_value = -float('inf')
-#     for action in env.get_actions(state):
-#         next_state = env.next_state(state, action)
-#         value = -negamax(next_state, depth - 1, -beta, -alpha, -color, env)
-#         max_value = max(max_value, value)
-#         alpha = max(alpha, value)
-#         if alpha >= beta:
-#             break
-#     return max_value
-
-def pvs(state, depth, alpha, beta, color, env):
-    if env.is_terminal(state):
-        return color * env.utility(state)
-    elif depth == 0:
-        return color * heuristic(state, env)
-    
-    max_value = -float('inf')
-    first_child = True
-    for action in env.get_actions(state):
-        next_state = env.next_state(state, action)
-        if first_child:
-            value = -pvs(next_state, depth - 1, -beta, -alpha, -color, env)
-            first_child = False
-        else:
-            # null window search
-            value = -pvs(next_state, depth - 1, -alpha - 1, -alpha, -color, env)
-            # if score is within the original alpha-beta window, perform full re-search
-            if alpha < value < beta:
-                value = -pvs(next_state, depth - 1, -beta, -value, -color, env)
-        
-        max_value = max(max_value, value)
-        alpha = max(alpha, value)
-        if alpha >= beta:
-            break
-    return max_value
-
-
-def iterative_deepening(state, env, max_time=4):
+    time_limit = 5 
     start_time = time.time()
+    end_time = start_time + time_limit
     depth = 1
-    best_move = None
-    alpha = -float('inf')
-    beta = float('inf')
-    
-    while True:
-        if time.time() - start_time > max_time:
-            break
-        
-        current_best_move, score = deepening_search(state, depth, alpha, beta, 1, env, start_time, max_time)
-        
-        # update best move if a better one was found
-        if current_best_move is not None:
-            best_move = current_best_move
-        
-        # increment depth for the next iteration
-        depth += 1
-    print("depth reached: ", depth) 
-    return best_move
+    best_score = float('-inf')
+    best_action = None
 
-def deepening_search(state, depth, alpha, beta, color, env, start_time, max_time):
-    best_move = None
-    best_score = -float('inf')
     for action in env.get_actions(state):
-        if time.time() - start_time > max_time:
-            break
-        
-        next_state = env.next_state(state, action)
-        score = -pvs(next_state, depth - 1, -beta, -alpha, -color, env)
-        
-        if score > best_score:
-            best_score = score
-            best_move = action
-        
-        alpha = max(alpha, score)
-        if alpha >= beta:
-            break
-    
-    return best_move, best_score
-     
-# def iterative_deepening(state, env, max_time=4):
-#     best_action = None
-#     start_time = time.time()
+        temp_state = env.next_state(state, action)
+        if env.is_terminal(temp_state):  # check for winning move
+            utility = env.utility(temp_state)
+            if utility > 0:  
+                return action
+            elif utility < 0: # L in 1 
+                return action
 
-#     for depth in range(1, 100):  # Arbitrary large number for depth
-#         best_value = -float('inf')
-#         for action in env.get_actions(state):
-#             next_state = env.next_state(state, action)
-#             value = -negamax(next_state, depth - 1, -float('inf'), float('inf'), 1, env)
-#             if value > best_value:
-#                 best_value = value
-#                 best_action = action
-#             if time.time() - start_time > max_time:
-#                 print("depth reached: ", depth)
-#                 return best_action
+    while time.time() < end_time:
+        for action in env.get_actions(state):
+            score = minimax_with_alpha_beta_pruning(env.next_state(state, action), env, depth, float('-inf'), float('inf'), False, end_time, p1)
+            if time.time() > end_time:
+                return best_action if best_action is not None else env.get_actions(state)[0]
+            if score > best_score:
+                best_score = score
+                best_action = action
+        depth += 1  
 
-#     return best_action
+    return best_action if best_action is not None else env.get_actions(state)[0]
 
-        
-def heuristic(state, env):
-    score = 0
-    move_count = m_count(state)
-    grid = state.grid 
 
-    bot_first = move_count % 2 == 0
+def minimax_with_alpha_beta_pruning(state, env, depth, alpha, beta, maximizingPlayer, end_time, p1):
+    if time.time() > end_time:
+        return heuristic(state, env, p1)
 
-    # Evaluate lines
-    for line in state.get_lines():
-        score += evaluate_line(line, bot_first)
-
-    # Apply claim_even or claim_odd logic based on who went first
-    if bot_first:
-        score += claim(state, True, grid)
-    else:
-        score += claim(state, False, grid)
-
-    return score
-
-def claim(state, is_bot_first, grid):
-    score = 0
-    
-    # Iterate over the grid to favor moves in strategic rows (even or odd)
-    for row_idx in range(grid.shape[0]):
-        for col_idx in range(grid.shape[1]):
-            piece = grid[row_idx][col_idx]
-            # Score bonus for controlling strategic rows based on who went first
-            if is_bot_first and row_idx % 2 != 0:  # Bot goes first, favor odd rows
-                score += (10 if piece == 1 else -5)  # Favor bot pieces, penalize opponent pieces in these rows
-            elif not is_bot_first and row_idx % 2 == 0:  # Bot goes second, favor even rows
-                score += (10 if piece == -1 else -5)
-
-    return score
-
-def evaluate_line(line, first):
-    score = 0
-    continuous_length = 1
-
-    for i in range(1, len(line)):
-        if first: 
-            if (line[i] and line[i - 1]) == 1 and line[i] != 0:
-                continuous_length += 1
-            else:
-                if continuous_length > 1:  # score iff there are 2 or more continuous chips
-                    score += continuous_length**2 * line[i - 1]  # power of number of continuous chips
-                continuous_length = 1
+    if env.is_terminal(state) or depth == 0:
+        if env.is_terminal(state):
+            return env.utility(state)
         else:
-            if (line[i] and line[i - 1]) == -1 and line[i] != 0:
-                continuous_length += 1
-            else:
-                if continuous_length > 1:  # score iff there are 2 or more continuous chips
-                    score += continuous_length**2 * line[i - 1]  # power of number of continuous chips
-                continuous_length = 1
+            return heuristic(state, env, p1)
+    
+    if maximizingPlayer:
+        maxEval = float('-inf')
+        for action in env.get_actions(state):
+            eval = minimax_with_alpha_beta_pruning(env.next_state(state, action), env, depth-1, alpha, beta, False, end_time, p1)
+            if time.time() > end_time:
+                return maxEval  # best found so far
+            maxEval = max(maxEval, eval)
+            alpha = max(alpha, eval)
+            if beta <= alpha:
+                break
+        return maxEval
+    else:
+        minEval = float('inf')
+        for action in env.get_actions(state):
+            eval = minimax_with_alpha_beta_pruning(env.next_state(state, action), env, depth-1, alpha, beta, True, end_time, p1)
+            if time.time() > end_time:
+                return minEval
+            minEval = min(minEval, eval)
+            beta = min(beta, eval)
+            if beta <= alpha:
+                break
+        return minEval
 
-    if continuous_length > 1:
-        score += continuous_length**2 * line[-1]
+
+def heuristic(state, env, p1):
+    score = 1
+    grid = state.grid
+
+    weight = max_analysis(state)
+
+    score *= weight
+
+    score += claim(grid, p1)
+
+    #print("final heuristic score: ", score)
+    return score
+
+
+def max_analysis(state):
+    weight = 1
+    lines = state.get_lines()
+    for line in lines:
+        if len(line) < 4:
+            continue
+        continuous = 0
+        eq_player_line = line == 1
+        for eq_player in eq_player_line:
+            if eq_player:
+                continuous += 1
+            else:
+                continuous = 0
+
+            weight *= (1.3 if continuous == 2 else 1)
+            weight *= (1.5 if continuous == 3 else 1)
+
+    return weight
+
+
+def claim(grid, p1):
+    score = 0
+    rows, cols = grid.shape
+    player = (1 if p1 else -1)
+
+    for col in range(cols):
+        for row in range(rows):
+            if grid[row, col] == player:
+                if row % 2 == 0:
+                    score += 10  # favor even rows more
+                else:
+                    score += 5
+            elif grid[row, col] == -player:
+                if row % 2 == 0:
+                    score -= 10
+                else:
+                    score -= 5
+
+    center_col = cols // 2
+    for row in range(rows):
+        if grid[row, center_col] == player:
+            score += 20  
 
     return score
 
-def m_count(state):
-    return np.count_nonzero(state.grid)
