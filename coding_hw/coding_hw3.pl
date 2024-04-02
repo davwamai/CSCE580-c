@@ -1,4 +1,5 @@
-print_state([A,B,C,D,E,F,G,H,I]) :- maplist(write, [A,B,C,"\n",D,E,F,"\n",G,H,I]).
+print_state([A,B,C,D,E,F,G,H,I]) :- 
+    maplist(write, [A,B,C,"\n",D,E,F,"\n",G,H,I]), nl.
 
 seq([X,Y,Z,_,_,_,_,_,_], [X,Y,Z], [0,1,2]).
 seq([_,_,_,X,Y,Z,_,_,_], [X,Y,Z], [3,4,5]).
@@ -24,3 +25,33 @@ in_row_3(S) :- seq(S, [X,Y,Z], _), X=x, Y=x,Z=x.
 valid_elem(E) :- E=o.
 valid_elem(E) :- E=b.
 valid_elem(E) :- E=x.
+
+
+two_ways_x(S) :-
+    valid_state(S),
+    findall(Pos, (seq(S, Seq, Pos), winnable_for_x(Seq)), WinPositions),  % replace w bagof
+    length(WinPositions, Count),
+    Count >= 2, % assert at least 2 winning states
+    print_state(S).
+
+
+% if 2x ^ 1b in any order
+winnable_for_x([x,x,b]).
+winnable_for_x([x,b,x]).
+winnable_for_x([b,x,x]).
+
+
+no_ways_x(S) :-
+    findall(Seq, seq(S, Seq, _), Seqs),
+    % no sequence allows X to win in the next move
+    maplist(no_immediate_win_x, Seqs).
+
+no_immediate_win_x(Seq) :-
+    count_elems(Seq, x, CountX),
+    count_elems(Seq, b, CountB),
+    %never finds immediate 2 x and 1 b? 
+    \+ (CountX = 2, CountB = 1).
+
+count_elems(List, Elem, Count) :-
+    include(==(Elem), List, Filtered),
+    length(Filtered, Count).

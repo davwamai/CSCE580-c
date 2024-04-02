@@ -10,7 +10,6 @@ def is_first(state) -> bool:
 
 def make_move(state: ConnectFourState, env: ConnectFour) -> int:
     """
-
     :param state: the current state
     :param env: the environment
     :return: the action to take
@@ -22,25 +21,25 @@ def make_move(state: ConnectFourState, env: ConnectFour) -> int:
         p1 = is_first(state)
         check_flag = True
 
-    time_limit = 5 
+    time_limit = 4 
     start_time = time.time()
     end_time = start_time + time_limit
-    depth = 1
+    depth = 0
     best_score = float('-inf')
     best_action = None
 
+    
     for action in env.get_actions(state):
-        temp_state = env.next_state(state, action)
-        if env.is_terminal(temp_state):  # check for winning move
-            utility = env.utility(temp_state)
-            if utility > 0:  
-                return action
-            elif utility < 0: # L in 1 
-                return action
+        dub = lookahead(state, env)
+        if dub is not None:
+            return dub
+        else:
+            pass
 
+    print("no winning state found")
     while time.time() < end_time:
         for action in env.get_actions(state):
-            score = minimax_with_alpha_beta_pruning(env.next_state(state, action), env, depth, float('-inf'), float('inf'), False, end_time, p1)
+            score = minimaxab(env.next_state(state, action), env, depth, float('-inf'), float('inf'), False, end_time, p1)
             if time.time() > end_time:
                 return best_action if best_action is not None else env.get_actions(state)[0]
             if score > best_score:
@@ -50,10 +49,24 @@ def make_move(state: ConnectFourState, env: ConnectFour) -> int:
 
     return best_action if best_action is not None else env.get_actions(state)[0]
 
+def lookahead(state, env):
+    for action_a in env.get_actions(state):
+        state_a = env.next_state(state, action_a) 
+        for action in env.get_actions(state_a):
+            temp_state = env.next_state(state_a, action)
+            if env.is_terminal(temp_state):  # check for winning move
+                print("winning move found")
+                utility = env.utility(temp_state)
+                print(utility)
+                if utility > 0: 
+                    print("dub")
+                    return action
+                elif utility < 0: 
+                    print("L")
+                    return action
 
-def minimax_with_alpha_beta_pruning(state, env, depth, alpha, beta, maximizingPlayer, end_time, p1):
-    if time.time() > end_time:
-        return heuristic(state, env, p1)
+# via G4G
+def minimaxab(state, env, depth, alpha, beta, maximizingPlayer, end_time, p1):
 
     if env.is_terminal(state) or depth == 0:
         if env.is_terminal(state):
@@ -64,9 +77,7 @@ def minimax_with_alpha_beta_pruning(state, env, depth, alpha, beta, maximizingPl
     if maximizingPlayer:
         maxEval = float('-inf')
         for action in env.get_actions(state):
-            eval = minimax_with_alpha_beta_pruning(env.next_state(state, action), env, depth-1, alpha, beta, False, end_time, p1)
-            if time.time() > end_time:
-                return maxEval  # best found so far
+            eval = minimaxab(env.next_state(state, action), env, depth-1, alpha, beta, False, end_time, p1)
             maxEval = max(maxEval, eval)
             alpha = max(alpha, eval)
             if beta <= alpha:
@@ -75,9 +86,7 @@ def minimax_with_alpha_beta_pruning(state, env, depth, alpha, beta, maximizingPl
     else:
         minEval = float('inf')
         for action in env.get_actions(state):
-            eval = minimax_with_alpha_beta_pruning(env.next_state(state, action), env, depth-1, alpha, beta, True, end_time, p1)
-            if time.time() > end_time:
-                return minEval
+            eval = minimaxab(env.next_state(state, action), env, depth-1, alpha, beta, True, end_time, p1)
             minEval = min(minEval, eval)
             beta = min(beta, eval)
             if beta <= alpha:
@@ -113,8 +122,8 @@ def max_analysis(state):
             else:
                 continuous = 0
 
-            weight *= (1.3 if continuous == 2 else 1)
-            weight *= (1.5 if continuous == 3 else 1)
+            weight *= (1.1 if continuous == 2 else 1)
+            weight *= (1.3 if continuous == 3 else 1)
 
     return weight
 
@@ -123,6 +132,7 @@ def claim(grid, p1):
     score = 0
     rows, cols = grid.shape
     player = (1 if p1 else -1)
+    #print("p1: ", p1)
 
     for col in range(cols):
         for row in range(rows):
@@ -140,7 +150,7 @@ def claim(grid, p1):
     center_col = cols // 2
     for row in range(rows):
         if grid[row, center_col] == player:
-            score += 20  
+            score += 0  
 
     return score
 
