@@ -11,55 +11,46 @@ import numpy as np
 from torch import Tensor
 
 
-class Net(nn.Module):
+class mnistnet(nn.Module):
     def __init__(self):
-        super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(1, 32, 3, 1)
-        self.conv2 = nn.Conv2d(32, 64, 3, 1)
-        self.dropout1 = nn.Dropout(0.25)
-        self.dropout2 = nn.Dropout(0.5)
-        self.fc1 = nn.Linear(9216, 128)
+        super(mnistnet, self).__init__()
+        self.conv1 = nn.Conv2d(1, 32, 5, 1, 2)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(32, 64, 5, 1, 2)
+        self.fc1 = nn.Linear(64*7*7, 128)
         self.fc2 = nn.Linear(128, 10)
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = F.relu(x)
-        x = self.conv2(x)
-        x = F.relu(x)
-        x = F.max_pool2d(x, 2)
-        x = self.dropout1(x)
-        x = torch.flatten(x, 1)
-        x = self.fc1(x)
-        x = F.relu(x)
-        x = self.dropout2(x)
+        x = x.view(-1, 1, 28, 28)
+        x = F.relu(self.conv1(x))
+        x = self.pool(x)
+        x = F.relu(self.conv2(x))
+        x = self.pool(x)
+        x = x.view(-1, 64*7*7)
+        x = F.relu(self.fc1(x))
         x = self.fc2(x)
-        output = F.log_softmax(x, dim=1)
-        return output
-
+        return x
 
 def train_nnet(train_input_np: np.ndarray, train_labels_np: np.array, val_input_np: np.ndarray,
                val_labels_np: np.array) -> nn.Module:
 
-    train_input_np = train_input_np.reshape((-1, 28, 28))
-    val_input_np = val_input_np.reshape((-1, 28, 28))
- 
-    train_input = torch.Tensor(train_input_np).unsqueeze(1)
-    train_labels = torch.LongTensor(train_labels_np)
-    val_input = torch.Tensor(val_input_np).unsqueeze(1)
-    val_labels = torch.LongTensor(val_labels_np)
+    train_input = torch.tensor(train_input_np.reshape(-1, 1, 28, 28), dtype=torch.float32)
+    train_labels = torch.tensor(train_labels_np, dtype=torch.long)
+
+    val_input = torch.tensor(val_input_np.reshape(-1, 1, 28, 28), dtype=torch.float32)
+    val_labels = torch.tensor(val_labels_np, dtype=torch.long)
 
     train_dataset = TensorDataset(train_input, train_labels)
     val_dataset = TensorDataset(val_input, val_labels)
 
-    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=1000, shuffle=False)
 
-    model = Net()
-
+    model = mnistnet()
     optimizer = optim.Adam(model.parameters())
     loss_function = nn.CrossEntropyLoss()
 
-    epochs = 10
+    epochs = 3
     for epoch in range(epochs):
         model.train()
         for batch_idx, (data, target) in enumerate(train_loader):
@@ -71,37 +62,26 @@ def train_nnet(train_input_np: np.ndarray, train_labels_np: np.array, val_input_
 
             if batch_idx % 100 == 0:
                 print(f"Train Epoch: {epoch} [{batch_idx * len(data)}/{len(train_loader.dataset)} ({100. * batch_idx / len(train_loader):.0f}%)]\tLoss: {loss.item():.6f}")
-
-        # Validation
-        model.eval()
-        val_loss = 0
-        correct = 0
-        with torch.no_grad():
-            for data, target in val_loader:
-                output = model(data)
-                val_loss += loss_function(output, target).item() # sum up batch loss
-                pred = output.argmax(dim=1, keepdim=True) # get the index of the max log-probability
-                correct += pred.eq(target.view_as(pred)).sum().item()
-
-        val_loss /= len(val_loader.dataset)
-        print(f'\nValidation set: Average loss: {val_loss:.4f}, Accuracy: {correct}/{len(val_loader.dataset)} ({100. * correct / len(val_loader.dataset):.0f}%)\n')
+        
+        evaluate_nnet(model, val_loader)
 
     return model
 
-def evaluate_nnet(nnet: nn.Module, data_input_np, data_labels_np):
+def evaluate_nnet(nnet: nn.Module, loader):
     nnet.eval()
     criterion = nn.CrossEntropyLoss()
 
-    val_input = torch.tensor(data_input_np).float()
-    val_labels = torch.tensor(data_labels_np).long()
-    nnet_output: Tensor = nnet(val_input)
+    val_loss = 0
+    correct = 0
+    with torch.no_grad():
+        for data, target in loader:
+            output = nnet(data)
+            val_loss += criterion(output, target).item() # sum up batch loss
+            pred = output.argmax(dim=1, keepdim=True) # get the index of the max log-probability
+            correct += pred.eq(target.view_as(pred)).sum().item()
 
-    loss = criterion(nnet_output, val_labels)
-
-    nnet_label = np.argmax(nnet_output.data.numpy(), axis=1)
-    acc: float = 100 * np.mean(nnet_label == val_labels.data.numpy())
-
-    return loss.item(), acc
+    val_loss /= len(loader.dataset)
+    print(f'\nValidation run: Average loss: {val_loss:.4f}, Accuracy: {correct}/{len(loader.dataset)} ({100. * correct / len(loader.dataset):.0f}%)\n')
 
 
 
@@ -144,8 +124,8 @@ def evaluate_policy(states, state_values, policy, env, discount, policy_eval_cut
         delta = 0
         print(f"Iterating through {len(states)} states")
         for state in states:
-            v = state_values[state]  # Save the current value of the state
-            new_v = 0  # placeholder for new value
+            v = state_values[state]
+            new_v = 0
             actions = env.get_actions(state)
             for action in actions:
                 expected_reward, next_states, probs = env.state_action_dynamics(state, action)
